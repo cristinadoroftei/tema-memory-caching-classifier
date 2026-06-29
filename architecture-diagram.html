@@ -1,0 +1,759 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Multi-Agent Architecture - Orchestrator + RAG Agent</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    background: #0f172a;
+    color: #e2e8f0;
+    padding: 40px 20px;
+    min-height: 100vh;
+  }
+  h1 {
+    text-align: center;
+    font-size: 28px;
+    margin-bottom: 10px;
+    color: #f8fafc;
+  }
+  .subtitle {
+    text-align: center;
+    color: #94a3b8;
+    margin-bottom: 40px;
+    font-size: 14px;
+  }
+
+  /* Layout */
+  .architecture {
+    max-width: 1100px;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 30px;
+  }
+
+  /* Graph containers */
+  .graph-box {
+    border-radius: 16px;
+    padding: 30px;
+    position: relative;
+  }
+  .orchestrator-box {
+    background: linear-gradient(135deg, #1e293b 0%, #1a2332 100%);
+    border: 2px solid #3b82f6;
+    box-shadow: 0 0 30px rgba(59, 130, 246, 0.1);
+  }
+  .rag-box {
+    background: linear-gradient(135deg, #1e293b 0%, #1a2332 100%);
+    border: 2px solid #10b981;
+    box-shadow: 0 0 30px rgba(16, 185, 129, 0.1);
+    max-width: 700px;
+    margin: 0 auto;
+    width: 100%;
+  }
+
+  .graph-title {
+    font-size: 18px;
+    font-weight: 700;
+    margin-bottom: 5px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .graph-title .tag {
+    font-size: 11px;
+    font-weight: 500;
+    padding: 2px 10px;
+    border-radius: 20px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .tag-supervisor { background: #3b82f6; color: white; }
+  .tag-worker { background: #10b981; color: white; }
+
+  .graph-file {
+    font-size: 12px;
+    color: #64748b;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    margin-bottom: 4px;
+  }
+  .graph-state {
+    font-size: 12px;
+    color: #94a3b8;
+    margin-bottom: 20px;
+  }
+  .graph-state code {
+    background: #334155;
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    font-size: 11px;
+  }
+
+  /* Nodes */
+  .flow {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0;
+    flex-wrap: wrap;
+    padding: 10px 0;
+  }
+  .node {
+    padding: 14px 22px;
+    border-radius: 12px;
+    font-size: 14px;
+    font-weight: 600;
+    text-align: center;
+    position: relative;
+    cursor: default;
+    transition: transform 0.2s, box-shadow 0.2s;
+    min-width: 130px;
+  }
+  .node:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 25px rgba(0,0,0,0.3);
+  }
+  .node-start {
+    background: #475569;
+    color: #e2e8f0;
+    border-radius: 50%;
+    width: 60px; height: 60px; min-width: 60px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12px; font-weight: 700;
+    padding: 0;
+  }
+  .node-end {
+    background: #475569;
+    color: #e2e8f0;
+    border-radius: 50%;
+    width: 60px; height: 60px; min-width: 60px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12px; font-weight: 700;
+    padding: 0;
+  }
+  .node-complete {
+    background: linear-gradient(135deg, #1d4ed8, #2563eb);
+    color: white;
+    border: 2px solid #60a5fa;
+  }
+  .node-todo {
+    background: linear-gradient(135deg, #b45309, #d97706);
+    color: white;
+    border: 2px dashed #fbbf24;
+  }
+  .node-done {
+    background: linear-gradient(135deg, #047857, #059669);
+    color: white;
+    border: 2px solid #34d399;
+  }
+  .node-rag-complete {
+    background: linear-gradient(135deg, #065f46, #047857);
+    color: white;
+    border: 2px solid #34d399;
+  }
+  .node-rag-todo {
+    background: linear-gradient(135deg, #92400e, #b45309);
+    color: white;
+    border: 2px dashed #fbbf24;
+  }
+  .node-label {
+    font-size: 11px;
+    color: rgba(255,255,255,0.7);
+    margin-top: 4px;
+    font-weight: 400;
+  }
+  .node-file {
+    font-size: 10px;
+    color: rgba(255,255,255,0.5);
+    font-family: monospace;
+    margin-top: 2px;
+  }
+
+  /* Arrows */
+  .arrow {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 8px;
+    color: #64748b;
+    font-size: 22px;
+    flex-shrink: 0;
+  }
+  .arrow svg { width: 40px; height: 24px; }
+  .arrow-blue svg line, .arrow-blue svg polyline { stroke: #60a5fa; }
+  .arrow-green svg line, .arrow-green svg polyline { stroke: #34d399; }
+  .arrow-yellow svg line, .arrow-yellow svg polyline { stroke: #fbbf24; }
+
+  /* Feedback loop */
+  .feedback-section {
+    display: flex;
+    align-items: stretch;
+    justify-content: center;
+    gap: 0;
+    margin-top: 10px;
+  }
+
+  /* Conditional label */
+  .condition-block {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+  }
+  .condition-label {
+    font-size: 11px;
+    padding: 3px 10px;
+    border-radius: 6px;
+    font-weight: 500;
+    white-space: nowrap;
+  }
+  .cond-yes { background: #14532d; color: #4ade80; }
+  .cond-no { background: #7c2d12; color: #fb923c; }
+  .cond-max { background: #44403c; color: #a8a29e; }
+
+  /* Loop arrow */
+  .loop-container {
+    position: relative;
+    margin: 15px auto 5px;
+    max-width: 700px;
+  }
+  .loop-svg {
+    width: 100%;
+    height: 70px;
+  }
+
+  /* Connection between graphs */
+  .connection {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    padding: 10px 0;
+  }
+  .connection-arrow {
+    width: 2px;
+    height: 30px;
+    position: relative;
+  }
+  .connection-arrow-down {
+    background: linear-gradient(to bottom, #3b82f6, #10b981);
+  }
+  .connection-arrow-up {
+    background: linear-gradient(to bottom, #10b981, #3b82f6);
+  }
+  .connection-arrow::after {
+    content: '';
+    position: absolute;
+    bottom: -6px;
+    left: 50%;
+    transform: translateX(-50%);
+    border-left: 6px solid transparent;
+    border-right: 6px solid transparent;
+  }
+  .connection-arrow-down::after { border-top: 8px solid #10b981; }
+  .connection-arrow-up::after { border-top: 8px solid #3b82f6; }
+  .connection-label {
+    font-size: 11px;
+    color: #94a3b8;
+    font-family: monospace;
+    background: #1e293b;
+    padding: 4px 12px;
+    border-radius: 6px;
+    border: 1px solid #334155;
+  }
+  .connection-labels {
+    display: flex;
+    gap: 40px;
+    align-items: center;
+  }
+
+  /* Legend */
+  .legend {
+    display: flex;
+    gap: 20px;
+    justify-content: center;
+    flex-wrap: wrap;
+    margin-top: 30px;
+    padding: 16px;
+    background: #1e293b;
+    border-radius: 12px;
+    max-width: 700px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    color: #94a3b8;
+  }
+  .legend-dot {
+    width: 14px; height: 14px;
+    border-radius: 4px;
+    flex-shrink: 0;
+  }
+  .dot-complete { background: #2563eb; border: 1px solid #60a5fa; }
+  .dot-done { background: #059669; border: 1px solid #34d399; }
+  .dot-todo { background: #d97706; border: 2px dashed #fbbf24; }
+
+  /* Prompt boxes */
+  .prompts-used {
+    margin-top: 15px;
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .prompt-tag {
+    font-size: 11px;
+    font-family: monospace;
+    padding: 3px 10px;
+    border-radius: 6px;
+    background: #334155;
+    color: #cbd5e1;
+  }
+
+  /* State fields popup */
+  .state-fields {
+    margin-top: 15px;
+    padding: 12px 16px;
+    background: #0f172a;
+    border-radius: 10px;
+    border: 1px solid #334155;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    font-size: 12px;
+    line-height: 1.8;
+  }
+  .state-fields .field-name { color: #93c5fd; }
+  .state-fields .field-type { color: #86efac; }
+  .state-fields .field-sep { color: #64748b; }
+
+  /* Responsive */
+  @media (max-width: 768px) {
+    .flow { flex-direction: column; gap: 10px; }
+    .arrow { transform: rotate(90deg); padding: 4px 0; }
+    .connection-labels { flex-direction: column; gap: 8px; }
+  }
+
+  /* Animated pulse for feedback loop */
+  @keyframes pulse-orange {
+    0%, 100% { opacity: 0.6; }
+    50% { opacity: 1; }
+  }
+  .loop-path {
+    animation: pulse-orange 3s ease-in-out infinite;
+  }
+
+  /* Tabs */
+  .tabs {
+    display: flex;
+    gap: 4px;
+    justify-content: center;
+    margin-bottom: 30px;
+  }
+  .tab {
+    padding: 10px 24px;
+    border-radius: 8px;
+    border: 1px solid #334155;
+    background: #1e293b;
+    color: #94a3b8;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    transition: all 0.2s;
+  }
+  .tab:hover { background: #334155; color: #e2e8f0; }
+  .tab.active {
+    background: #3b82f6;
+    color: white;
+    border-color: #3b82f6;
+  }
+  .tab-content { display: none; }
+  .tab-content.active { display: block; }
+
+  /* Step by step */
+  .steps {
+    max-width: 800px;
+    margin: 30px auto 0;
+  }
+  .step {
+    display: flex;
+    gap: 16px;
+    padding: 16px;
+    margin-bottom: 12px;
+    background: #1e293b;
+    border-radius: 12px;
+    border-left: 4px solid #334155;
+    cursor: pointer;
+    transition: all 0.3s;
+  }
+  .step:hover, .step.active {
+    border-left-color: #3b82f6;
+    background: #1e2d3d;
+  }
+  .step-num {
+    width: 32px; height: 32px;
+    border-radius: 50%;
+    background: #334155;
+    color: #e2e8f0;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 14px; font-weight: 700;
+    flex-shrink: 0;
+  }
+  .step.active .step-num { background: #3b82f6; }
+  .step-content { flex: 1; }
+  .step-title { font-weight: 600; font-size: 14px; margin-bottom: 4px; }
+  .step-desc { font-size: 13px; color: #94a3b8; line-height: 1.5; }
+  .step-file { font-size: 11px; color: #64748b; font-family: monospace; margin-top: 4px; }
+  .step-arrow {
+    color: #64748b;
+    font-size: 12px;
+    text-align: center;
+    padding: 4px 0 4px 48px;
+  }
+</style>
+</head>
+<body>
+
+<h1>Multi-Agent Architecture</h1>
+<p class="subtitle">Orchestrator (Supervisor) + RAG Agent (Worker) &mdash; Lesson 6 Exercise</p>
+
+<div class="tabs">
+  <div class="tab active" onclick="showTab('diagram')">Architecture Diagram</div>
+  <div class="tab" onclick="showTab('walkthrough')">Step-by-Step Flow</div>
+  <div class="tab" onclick="showTab('states')">State Models</div>
+</div>
+
+<!-- TAB 1: DIAGRAM -->
+<div class="tab-content active" id="tab-diagram">
+<div class="architecture">
+
+  <!-- ORCHESTRATOR GRAPH -->
+  <div class="graph-box orchestrator-box">
+    <div class="graph-title">
+      Orchestrator <span class="tag tag-supervisor">Supervisor</span>
+    </div>
+    <div class="graph-file">src/orchestrator.py</div>
+    <div class="graph-state">State: <code>OrchestratorState</code> (state.py:44) &mdash; shared by all nodes below</div>
+
+    <div class="flow">
+      <div class="node node-start">START</div>
+
+      <div class="arrow arrow-blue">
+        <svg viewBox="0 0 40 24"><line x1="4" y1="12" x2="30" y2="12" stroke-width="2"/><polyline points="28,6 34,12 28,18" fill="none" stroke-width="2"/></svg>
+      </div>
+
+      <div class="node node-complete">
+        call_rag
+        <div class="node-label">Calls RAG Agent</div>
+        <div class="node-file">:62 COMPLET</div>
+      </div>
+
+      <div class="arrow arrow-blue">
+        <svg viewBox="0 0 40 24"><line x1="4" y1="12" x2="30" y2="12" stroke-width="2"/><polyline points="28,6 34,12 28,18" fill="none" stroke-width="2"/></svg>
+      </div>
+
+      <div class="condition-block">
+        <div class="node node-done">
+          evaluate
+          <div class="node-label">LLM judges chunks</div>
+          <div class="node-file">:77 DONE</div>
+        </div>
+        <div style="display:flex; gap:30px; margin-top:8px;">
+          <div class="condition-label cond-yes">can_answer = true</div>
+          <div class="condition-label cond-max">max iterations</div>
+        </div>
+      </div>
+
+      <div class="arrow arrow-blue">
+        <svg viewBox="0 0 40 24"><line x1="4" y1="12" x2="30" y2="12" stroke-width="2"/><polyline points="28,6 34,12 28,18" fill="none" stroke-width="2"/></svg>
+      </div>
+
+      <div class="node node-done">
+        answer
+        <div class="node-label">LLM generates reply</div>
+        <div class="node-file">:105 DONE</div>
+      </div>
+
+      <div class="arrow arrow-blue">
+        <svg viewBox="0 0 40 24"><line x1="4" y1="12" x2="30" y2="12" stroke-width="2"/><polyline points="28,6 34,12 28,18" fill="none" stroke-width="2"/></svg>
+      </div>
+
+      <div class="node node-end">END</div>
+    </div>
+
+    <!-- Feedback loop arrow -->
+    <div class="loop-container">
+      <svg class="loop-svg" viewBox="0 0 700 70" preserveAspectRatio="xMidYMid meet">
+        <!-- Loop path: from evaluate back to call_rag -->
+        <path d="M 430 5 C 430 55, 200 55, 200 5"
+              fill="none" stroke="#fb923c" stroke-width="2" stroke-dasharray="6,4" class="loop-path"/>
+        <polygon points="197,10 200,0 208,10" fill="#fb923c" class="loop-path"/>
+        <!-- Label -->
+        <text x="315" y="52" text-anchor="middle" fill="#fb923c" font-size="12" font-family="monospace">
+          can_answer=false + feedback (max 3 iterations)
+        </text>
+      </svg>
+    </div>
+
+    <div class="prompts-used">
+      <span style="font-size:11px; color:#64748b; margin-right:4px;">Prompts:</span>
+      <span class="prompt-tag">rag_evaluate.yaml</span>
+      <span class="prompt-tag">rag_answer.yaml</span>
+    </div>
+  </div>
+
+  <!-- CONNECTION -->
+  <div class="connection">
+    <div class="connection-labels">
+      <div style="display:flex; flex-direction:column; align-items:center; gap:4px;">
+        <div class="connection-label">query + feedback</div>
+        <div class="connection-arrow connection-arrow-down"></div>
+      </div>
+      <div style="font-size:12px; color:#475569;">self.rag.run(query, feedback)</div>
+      <div style="display:flex; flex-direction:column; align-items:center; gap:4px;">
+        <div class="connection-arrow connection-arrow-up"></div>
+        <div class="connection-label">RAGSearchResult</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- RAG AGENT GRAPH -->
+  <div class="graph-box rag-box">
+    <div class="graph-title">
+      RAG Agent <span class="tag tag-worker">Worker</span>
+    </div>
+    <div class="graph-file">src/rag_agent.py</div>
+    <div class="graph-state">State: <code>RAGAgentState</code> (state.py:57) &mdash; separate state, only sees what Orchestrator passes</div>
+
+    <div class="flow">
+      <div class="node node-start">START</div>
+
+      <div class="arrow arrow-green">
+        <svg viewBox="0 0 40 24"><line x1="4" y1="12" x2="30" y2="12" stroke-width="2"/><polyline points="28,6 34,12 28,18" fill="none" stroke-width="2"/></svg>
+      </div>
+
+      <div class="node node-todo">
+        refine
+        <div class="node-label">Rewrite query if feedback</div>
+        <div class="node-file">:59 TODO</div>
+      </div>
+
+      <div class="arrow arrow-green">
+        <svg viewBox="0 0 40 24"><line x1="4" y1="12" x2="30" y2="12" stroke-width="2"/><polyline points="28,6 34,12 28,18" fill="none" stroke-width="2"/></svg>
+      </div>
+
+      <div class="node node-rag-complete">
+        search
+        <div class="node-label">pgvector lookup</div>
+        <div class="node-file">:83 COMPLET</div>
+      </div>
+
+      <div class="arrow arrow-green">
+        <svg viewBox="0 0 40 24"><line x1="4" y1="12" x2="30" y2="12" stroke-width="2"/><polyline points="28,6 34,12 28,18" fill="none" stroke-width="2"/></svg>
+      </div>
+
+      <div class="node node-end">END</div>
+    </div>
+
+    <div class="prompts-used">
+      <span style="font-size:11px; color:#64748b; margin-right:4px;">Prompts:</span>
+      <span class="prompt-tag">rag_refine.yaml</span>
+    </div>
+  </div>
+
+</div>
+</div>
+
+<!-- TAB 2: STEP-BY-STEP -->
+<div class="tab-content" id="tab-walkthrough">
+<div class="steps">
+  <h2 style="text-align:center; margin-bottom:20px; font-size:20px;">Full Flow: Question &rarr; Answer</h2>
+  <p style="text-align:center; color:#94a3b8; margin-bottom:30px; font-size:13px;">Click a step to highlight it. Orange = feedback loop (iterations 2+).</p>
+
+  <div class="step active" onclick="activateStep(this)">
+    <div class="step-num">1</div>
+    <div class="step-content">
+      <div class="step-title">User asks a question</div>
+      <div class="step-desc"><code>OrchestratorState(query="Care e totalul facturilor TechSoft?")</code> is created and the graph starts.</div>
+      <div class="step-file">src/main.py:81 &rarr; app.invoke()</div>
+    </div>
+  </div>
+  <div class="step-arrow">&darr;</div>
+
+  <div class="step" onclick="activateStep(this)">
+    <div class="step-num">2</div>
+    <div class="step-content">
+      <div class="step-title">node_call_rag &mdash; Orchestrator calls RAG Agent</div>
+      <div class="step-desc">Takes <code>state.query</code> + <code>state.feedback</code> (None first time), creates a fresh <code>RAGAgentState</code>, and runs the RAG Agent graph via <code>self.rag.run()</code>.</div>
+      <div class="step-file">src/orchestrator.py:62 &rarr; src/rag_agent.py:137</div>
+    </div>
+  </div>
+  <div class="step-arrow">&darr; enters RAG Agent subgraph</div>
+
+  <div class="step" onclick="activateStep(this)" style="border-left-color: #10b981;">
+    <div class="step-num" style="background:#065f46;">3</div>
+    <div class="step-content">
+      <div class="step-title">node_refine &mdash; Refine query (if feedback exists)</div>
+      <div class="step-desc"><strong>First iteration:</strong> no feedback &rarr; returns <code>RefinedQuery(query=original)</code> unchanged.<br>
+      <strong>Later iterations:</strong> renders <code>rag_refine.yaml</code> with feedback (missing_info, suggestion), LLM rewrites the query, possibly adjusts threshold.</div>
+      <div class="step-file">src/rag_agent.py:59 &mdash; TODO</div>
+    </div>
+  </div>
+  <div class="step-arrow">&darr;</div>
+
+  <div class="step" onclick="activateStep(this)" style="border-left-color: #10b981;">
+    <div class="step-num" style="background:#065f46;">4</div>
+    <div class="step-content">
+      <div class="step-title">node_search &mdash; Search pgvector</div>
+      <div class="step-desc">Uses <code>state.current_query</code> (refined or original) and <code>state.current_threshold</code> to search pgvector via <code>RAGService.search()</code>. Returns list of <code>SearchResultItem</code> with content, filename, score.</div>
+      <div class="step-file">src/rag_agent.py:83 &mdash; COMPLET</div>
+    </div>
+  </div>
+  <div class="step-arrow">&darr; returns to Orchestrator</div>
+
+  <div class="step" onclick="activateStep(this)">
+    <div class="step-num">5</div>
+    <div class="step-content">
+      <div class="step-title">node_evaluate &mdash; Can we answer?</div>
+      <div class="step-desc">Builds context string from chunks. Renders <code>rag_evaluate.yaml</code> with query, context, scores. LLM returns JSON parsed into <code>OrchestratorFeedback</code>: <code>can_answer</code>, <code>missing_info</code>, <code>wrong_context</code>, <code>suggestion</code>.</div>
+      <div class="step-file">src/orchestrator.py:77 &mdash; DONE</div>
+    </div>
+  </div>
+  <div class="step-arrow">&darr; routing decision</div>
+
+  <div class="step" onclick="activateStep(this)" style="border-left-color: #fb923c;">
+    <div class="step-num" style="background:#92400e;">?</div>
+    <div class="step-content">
+      <div class="step-title">_should_continue &mdash; Route decision</div>
+      <div class="step-desc">
+        <code>can_answer=true</code> &rarr; go to <strong>answer</strong><br>
+        <code>iteration >= 3</code> &rarr; go to <strong>answer</strong> (give best effort)<br>
+        Otherwise &rarr; loop back to <strong>call_rag</strong> with feedback
+      </div>
+      <div class="step-file">src/orchestrator.py:148</div>
+    </div>
+  </div>
+  <div class="step-arrow" style="color:#fb923c;">&darr; (if looping: back to step 2 with feedback)</div>
+
+  <div class="step" onclick="activateStep(this)">
+    <div class="step-num">6</div>
+    <div class="step-content">
+      <div class="step-title">node_answer &mdash; Generate final response</div>
+      <div class="step-desc">Builds context from chunks. Renders <code>rag_answer.yaml</code>. LLM generates a human-readable answer. Status is <code>"success"</code> if can_answer was true, <code>"partial"</code> if we have chunks but hit max iterations, <code>"failed"</code> if no results.</div>
+      <div class="step-file">src/orchestrator.py:105 &mdash; DONE</div>
+    </div>
+  </div>
+  <div class="step-arrow">&darr;</div>
+
+  <div class="step" onclick="activateStep(this)">
+    <div class="step-num" style="background:#475569;">end</div>
+    <div class="step-content">
+      <div class="step-title">Result returned to user</div>
+      <div class="step-desc">Final state contains <code>answer</code> (text) and <code>status</code> ("success" | "partial" | "failed"). Printed by <code>main.py</code>.</div>
+    </div>
+  </div>
+</div>
+</div>
+
+<!-- TAB 3: STATE MODELS -->
+<div class="tab-content" id="tab-states">
+<div style="max-width:900px; margin:0 auto; display:flex; gap:20px; flex-wrap:wrap; justify-content:center;">
+
+  <!-- OrchestratorState -->
+  <div style="flex:1; min-width:380px;">
+    <div class="graph-box orchestrator-box">
+      <div class="graph-title" style="font-size:16px;">OrchestratorState</div>
+      <div class="graph-file">state.py:44</div>
+      <p style="font-size:12px; color:#94a3b8; margin:8px 0 12px;">Shared by: node_call_rag, node_evaluate, node_answer</p>
+      <div class="state-fields">
+        <span class="field-name">query</span><span class="field-sep">: </span><span class="field-type">str</span> &mdash; original question<br>
+        <span class="field-name">rag_result</span><span class="field-sep">: </span><span class="field-type">RAGSearchResult | None</span> &mdash; chunks from RAG<br>
+        <span class="field-name">feedback</span><span class="field-sep">: </span><span class="field-type">OrchestratorFeedback | None</span> &mdash; eval result<br>
+        <span class="field-name">iteration</span><span class="field-sep">: </span><span class="field-type">int</span> &mdash; loop counter (max 3)<br>
+        <span class="field-name">answer</span><span class="field-sep">: </span><span class="field-type">str</span> &mdash; final answer<br>
+        <span class="field-name">status</span><span class="field-sep">: </span><span class="field-type">"pending" | "success" | "partial" | "failed"</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- RAGAgentState -->
+  <div style="flex:1; min-width:380px;">
+    <div class="graph-box rag-box">
+      <div class="graph-title" style="font-size:16px;">RAGAgentState</div>
+      <div class="graph-file">state.py:57</div>
+      <p style="font-size:12px; color:#94a3b8; margin:8px 0 12px;">Shared by: node_refine, node_search</p>
+      <div class="state-fields">
+        <span class="field-name">query</span><span class="field-sep">: </span><span class="field-type">str</span> &mdash; original question<br>
+        <span class="field-name">feedback</span><span class="field-sep">: </span><span class="field-type">OrchestratorFeedback | None</span> &mdash; from orchestrator<br>
+        <span class="field-name">refined</span><span class="field-sep">: </span><span class="field-type">RefinedQuery | None</span> &mdash; rewritten query<br>
+        <span class="field-name">result</span><span class="field-sep">: </span><span class="field-type">RAGSearchResult | None</span> &mdash; search results<br>
+        <br>
+        <span style="color:#64748b;">@property</span> <span class="field-name">current_query</span> &mdash; refined or original<br>
+        <span style="color:#64748b;">@property</span> <span class="field-name">current_threshold</span> &mdash; from refined or None
+      </div>
+    </div>
+  </div>
+
+  <!-- OrchestratorFeedback -->
+  <div style="flex:1; min-width:380px;">
+    <div class="graph-box" style="border-color:#f59e0b; background:linear-gradient(135deg,#1e293b,#1a2332);">
+      <div class="graph-title" style="font-size:16px; color:#fbbf24;">OrchestratorFeedback</div>
+      <div class="graph-file">state.py:36</div>
+      <p style="font-size:12px; color:#94a3b8; margin:8px 0 12px;">The bridge: written by evaluate, read by refine</p>
+      <div class="state-fields">
+        <span class="field-name">can_answer</span><span class="field-sep">: </span><span class="field-type">bool</span> &mdash; enough info?<br>
+        <span class="field-name">missing_info</span><span class="field-sep">: </span><span class="field-type">str</span> &mdash; what's missing<br>
+        <span class="field-name">wrong_context</span><span class="field-sep">: </span><span class="field-type">str</span> &mdash; what's irrelevant<br>
+        <span class="field-name">suggestion</span><span class="field-sep">: </span><span class="field-type">str</span> &mdash; search suggestion
+      </div>
+    </div>
+  </div>
+
+  <!-- RefinedQuery -->
+  <div style="flex:1; min-width:380px;">
+    <div class="graph-box" style="border-color:#a78bfa; background:linear-gradient(135deg,#1e293b,#1a2332);">
+      <div class="graph-title" style="font-size:16px; color:#c4b5fd;">RefinedQuery</div>
+      <div class="graph-file">state.py:30</div>
+      <p style="font-size:12px; color:#94a3b8; margin:8px 0 12px;">Output of node_refine, input to node_search</p>
+      <div class="state-fields">
+        <span class="field-name">query</span><span class="field-sep">: </span><span class="field-type">str</span> &mdash; rewritten query<br>
+        <span class="field-name">threshold</span><span class="field-sep">: </span><span class="field-type">float | None</span> &mdash; adjusted or keep current
+      </div>
+    </div>
+  </div>
+
+</div>
+</div>
+
+<!-- LEGEND -->
+<div class="legend">
+  <div class="legend-item"><div class="legend-dot dot-complete"></div> Pre-built (COMPLET)</div>
+  <div class="legend-item"><div class="legend-dot dot-done"></div> Implemented (DONE)</div>
+  <div class="legend-item"><div class="legend-dot dot-todo"></div> Still TODO</div>
+  <div class="legend-item">
+    <svg width="30" height="14"><line x1="0" y1="7" x2="30" y2="7" stroke="#fb923c" stroke-width="2" stroke-dasharray="4,3"/></svg>
+    Feedback loop
+  </div>
+</div>
+
+<script>
+function showTab(name) {
+  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('tab-' + name).classList.add('active');
+  event.target.classList.add('active');
+}
+
+function activateStep(el) {
+  document.querySelectorAll('.step').forEach(s => s.classList.remove('active'));
+  el.classList.add('active');
+}
+</script>
+
+</body>
+</html>

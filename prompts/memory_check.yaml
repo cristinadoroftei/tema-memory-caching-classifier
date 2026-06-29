@@ -1,0 +1,23 @@
+name: memory_check
+version: "1.0.0"
+description: Decide dacă întrebarea poate fi răspunsă din memoria conversației
+
+prompt: |
+  Ai primit o întrebare de la utilizator și istoricul conversației anterioare.
+  Decide dacă poți răspunde la întrebare DOAR din informațiile din istoric, fără căutare suplimentară.
+
+  ÎNTREBARE: {{ query }}
+
+  {% if summary %}
+  REZUMAT CONVERSAȚIE ANTERIOARĂ:
+  {{ summary }}
+  {% endif %}
+
+  {% if recent_messages %}
+  MESAJE RECENTE:
+  {% for msg in recent_messages %}
+  {{ msg.role }}: {{ msg.content }}
+  {% endfor %}
+  {% endif %}
+
+  Răspunde cu un singur cuvânt: DA sau NU

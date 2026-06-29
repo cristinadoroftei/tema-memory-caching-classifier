@@ -1,0 +1,22 @@
+# Environment
+.env
+.venv/
+__pycache__/
+*.pyc
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+
+# Data (large files — too large for git)
+data/*.dump
+data/documents-sql/*.xlsx
+
+# Logs (generated at runtime)
+logs/
+
+# Alembic
+*.db

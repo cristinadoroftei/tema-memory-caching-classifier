@@ -1,0 +1,92 @@
+query,label
+"Caută documente despre achiziții publice",search
+"Găsește contractele de construcții",search
+"Ce documente avem despre licitații deschise?",search
+"Arată-mi documentele legate de furnizorul TechSoft",search
+"Vreau să văd contractele din 2023",search
+"Există documente despre achiziții directe de IT?",search
+"Caută informații despre proceduri de licitație",search
+"Ce avem în baza de date despre servicii de consultanță?",search
+"Găsește documentele referitoare la achiziții de echipamente medicale",search
+"Vreau documente despre contracte de transport",search
+"Caută tot ce avem despre furnizorul DataPro",search
+"Ce documente menționează achiziții de software?",search
+"Arată-mi ce avem despre proceduri simplificate",search
+"Găsește contracte cu valoare mare",search
+"Există documente despre achiziții de mobilier?",search
+"Ce informații avem despre licitații din sectorul energetic?",search
+"Caută documente legate de servicii de pază",search
+"Vreau să găsesc contracte de furnizare",search
+"Ce documente avem despre achiziții de materiale sanitare?",search
+"Caută referințe la proceduri negociate",search
+"Găsește tot ce ține de contracte cadru",search
+"Ce avem despre achiziții de alimente?",search
+"Arată documentele despre servicii de curățenie",search
+"Există informații despre licitații pentru drumuri?",search
+"Caută documente privind achiziții de medicamente",search
+"Vreau să văd ce avem despre furnizorul AlphaConstruct",search
+"Ce documente menționează contracte de închiriere?",search
+"Găsește informații despre achiziții de combustibil",search
+"Caută tot ce ține de servicii de întreținere",search
+"Ce avem legat de achiziții din domeniul telecomunicații?",search
+"Care este valoarea totală a achizițiilor din 2023?",extract
+"Câte achiziții directe au fost anul trecut?",extract
+"Care sunt top 5 furnizori după valoarea contractelor?",extract
+"Ce valoare are contractul cu TechSoft?",extract
+"Câți furnizori unici avem în baza de date?",extract
+"Care este valoarea medie a achizițiilor directe?",extract
+"Câte anunțuri de inițiere au fost publicate luna trecută?",extract
+"Care este furnizorul cu cele mai multe contracte?",extract
+"Ce sumă totală s-a cheltuit pe servicii IT?",extract
+"Câte achiziții au depășit 100.000 lei?",extract
+"Care este valoarea maximă a unui contract?",extract
+"Câte proceduri de licitație au fost finalizate?",extract
+"Ce procent din achiziții sunt directe vs licitații?",extract
+"Care sunt autoritățile contractante cu cele mai multe achiziții?",extract
+"Câte contracte au fost semnate în ultimul trimestru?",extract
+"Care este valoarea totală pe categorii de produse?",extract
+"Câți furnizori au contracte peste 50.000 lei?",extract
+"Care este media valorică pe tip de achiziție?",extract
+"Câte achiziții directe sunt din categoria construcții?",extract
+"Care este top 10 autorități contractante după cheltuieli?",extract
+"Ce sumă s-a alocat pentru echipamente medicale?",extract
+"Câte contracte are furnizorul DataPro?",extract
+"Care este valoarea minimă și maximă pe achiziții directe?",extract
+"Câte achiziții au fost făcute de Primăria București?",extract
+"Care sunt lunile cu cele mai multe achiziții?",extract
+"Ce valoare au contractele de servicii vs furnizare?",extract
+"Câte anunțuri de inițiere sunt pe tip de procedură?",extract
+"Care este totalul achizițiilor pentru fiecare județ?",extract
+"Câte achiziții sub 10.000 lei au fost înregistrate?",extract
+"Care furnizor are cea mai mare valoare totală contractată?",extract
+"Rezumă documentele despre achiziții publice",summarize
+"Fă un sumar al contractelor din 2023",summarize
+"Sintetizează informațiile despre furnizorul TechSoft",summarize
+"Rezumă ce avem despre proceduri de licitație",summarize
+"Fă o sinteză a documentelor despre achiziții IT",summarize
+"Sumarizează contractele de construcții",summarize
+"Vreau un rezumat al documentelor despre servicii de consultanță",summarize
+"Fă un sumar al achizițiilor directe",summarize
+"Rezumă informațiile despre echipamente medicale",summarize
+"Sintetizează documentele referitoare la transport",summarize
+"Fă un rezumat general al bazei de documente",summarize
+"Sumarizează ce știm despre furnizorul AlphaConstruct",summarize
+"Vreau o sinteză a procedurilor negociate",summarize
+"Rezumă contractele cadru existente",summarize
+"Fă un sumar al documentelor despre servicii de pază",summarize
+"Sintetizează informațiile despre licitații deschise",summarize
+"Rezumă tot ce avem despre achiziții de software",summarize
+"Vreau un overview al contractelor de furnizare",summarize
+"Fă o sinteză a achizițiilor din sectorul energetic",summarize
+"Sumarizează documentele despre achiziții de alimente",summarize
+"Rezumă informațiile despre servicii de curățenie",summarize
+"Fă un sumar al licitațiilor pentru drumuri",summarize
+"Sintetizează ce avem despre achiziții de medicamente",summarize
+"Vreau un rezumat al contractelor de închiriere",summarize
+"Fă o sinteză a achizițiilor de combustibil",summarize
+"Rezumă documentele despre servicii de întreținere",summarize
+"Sumarizează informațiile din domeniul telecomunicații",summarize
+"Vreau un sumar al tuturor achizițiilor directe recente",summarize
+"Fă un rezumat al principalelor contracte",summarize
+"Sintetizează datele despre furnizorii activi",summarize
+"Rezumă documentele privind procedurile simplificate",summarize

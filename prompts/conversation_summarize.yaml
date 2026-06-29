@@ -1,0 +1,22 @@
+name: conversation_summarize
+version: "1.0.0"
+description: Sumarizează o conversație pentru memorie pe termen lung
+
+prompt: |
+  Sumarizează conversația de mai jos într-un paragraf concis.
+  Păstrează: întrebările principale ale utilizatorului, răspunsurile cheie, și orice fapte/date/cifre importante.
+  Omite: salutări, repetiții, detalii minore.
+
+  {% if existing_summary %}
+  REZUMAT ANTERIOR:
+  {{ existing_summary }}
+
+  MESAJE NOI:
+  {% else %}
+  CONVERSAȚIE:
+  {% endif %}
+  {% for msg in messages %}
+  {{ msg.role }}: {{ msg.content }}
+  {% endfor %}
+
+  REZUMAT ACTUALIZAT:
