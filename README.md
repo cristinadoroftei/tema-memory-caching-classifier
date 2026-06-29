@@ -1,259 +1,161 @@
-# Temă: Multi-Agent System
+# Tema Lectia 7-8: Memory, Caching & Intent Classifier
 
-Două sisteme:
-1. **Orchestrator + RAG** - caută în documente
-2. **Analyst + NL2SQL** - query-uri SQL
+Proiect bazat pe multi-agent system-ul din lectia 5-6 (Orchestrator + RAG + Analyst + NL2SQL), extins cu:
 
-## Arhitectură
+1. **Conversation Memory** — memorie persistenta intre request-uri (L8)
+2. **Prompt Caching** — cache pe system prompts cu Anthropic API (L8)
+3. **Intent Classifier** — clasificare intent cu scikit-learn, integrat in graf (L7)
 
-### 1. Orchestrator + RAG (Hierarchical Multi-Agent)
+---
 
-```
-┌──────────────────────────────────────────────────────────────────┐
-│                        ORCHESTRATOR                               │
-│                        (Supervizor)                               │
-│                                                                   │
-│    ┌──────────┐      ┌──────────┐      ┌────────┐                │
-│    │ call_rag │ ───► │ evaluate │ ───► │ answer │ ───► END       │
-│    └──────────┘      └──────────┘      └────────┘                │
-│         ▲                  │                                      │
-│         │                  │ can_answer=false                     │
-│         │                  │ + feedback                           │
-│         └──────────────────┘                                      │
-│                                                                   │
-│    max 3 iterații                                                 │
-└──────────────────────────────────────────────────────────────────┘
-         │                   ▲
-         │ query +           │ RAGSearchResult
-         │ feedback          │
-         ▼                   │
-┌──────────────────────────────────────────────────────────────────┐
-│                         RAG AGENT                                 │
-│                         (Worker)                                  │
-│                                                                   │
-│    ┌────────┐      ┌────────┐                                    │
-│    │ refine │ ───► │ search │ ───► END                           │
-│    └────────┘      └────────┘                                    │
-│                                                                   │
-│    refine: dacă are feedback, rafinează query-ul                 │
-│    search: caută în pgvector, returnează chunks                  │
-└──────────────────────────────────────────────────────────────────┘
-```
+## Task 1: Conversation Memory
 
-**Flow:**
-1. Orchestrator apelează RAG Agent cu query
-2. RAG Agent caută și returnează chunks
-3. Orchestrator evaluează: "Pot răspunde?"
-4. Dacă NU → trimite feedback, RAG Agent rafinează și caută din nou
-5. Dacă DA → generează răspuns final
+**Problema:** Fiecare request era independent — agentul nu stia ce s-a discutat inainte.
 
-**Prompturi:** `rag_evaluate.yaml`, `rag_answer.yaml`, `rag_refine.yaml`
+**Solutia:** SummaryBuffer pattern — mesajele raw se salveaza in PostgreSQL, iar cand depasesc un threshold (4 mesaje), se sumarizeaza automat si se sterg cele vechi.
 
-### 2. Analyst + NL2SQL (Hierarchical Multi-Agent)
+### Ce s-a construit
+
+- **Doua tabele noi**: `sessions` + `conversation_messages` (migratie `004`)
+- **MemoryManager** (`src/memory_manager.py`): save_message, load_context, _summarize
+- **Memory check routing**: LLM-ul decide daca intrebarea poate fi raspunsa doar din memorie (fara RAG)
+
+### Flow actualizat
 
 ```
-┌──────────────────────────────────────────────────────────────────┐
-│                      ANALYST AGENT                                │
-│                      (Supervizor)                                 │
-│                                                                   │
-│    ┌───────────┐      ┌──────────────┐      ┌─────────────┐      │
-│    │ make_plan │ ───► │ execute_step │ ───► │ synthesize  │──►END │
-│    └───────────┘      └──────────────┘      └─────────────┘      │
-│                              │  ▲                                 │
-│                              └──┘ loop                            │
-│                                                                   │
-│    Plan: [QueryStep, QueryStep, ToolStep, ...]                    │
-│    Slices: {"q1": DataFrame, "q2": DataFrame, "joined": DataFrame}│
-└──────────────────────────────────────────────────────────────────┘
-           │                              │
-           │ QueryStep                    │ ToolStep
-           ▼                              ▼
-┌──────────────────────────────┐    ┌─────────────────────────┐
-│        NL2SQL AGENT          │    │      TOOL REGISTRY      │
-│         (Worker)             │    │                         │
-│                              │    │  join_data(dfs, keys)   │
-│  get_context                 │    │  filter_data(df, cond)  │
-│      │                       │    │                         │
-│      ▼                       │    └─────────────────────────┘
-│  generate_sql                │
-│      │                       │
-│      ▼                       │
-│  validate_sql ───┬───► execute_sql ───┬───► END (success)
-│                  │           │        │
-│                  │ invalid   │ error  │
-│                  ▼           ▼        │
-│             handle_error ◄────────────┘
-│                  │
-│            retry < max?
-│             yes │ no
-│                 ▼  ▼
-│         generate_sql  END (failed)
-└──────────────────────────────┘
+load_memory → check_memory ──┬──→ answer_from_memory → save_memory → END
+                             └──→ ... (RAG/Analyst) → save_memory → END
 ```
 
-**Flow Analyst:**
-1. `make_plan` - LLM generează plan cu QueryStep și ToolStep
-2. `execute_step` - execută fiecare pas:
-   - QueryStep → apelează NL2SQL Agent → DataFrame în `slices[id]`
-   - ToolStep → apelează tool (join/filter) → DataFrame în `slices[id]`
-3. `synthesize` - LLM generează răspuns din rezultate
+### Fisiere cheie
+- `src/memory_manager.py` — logica SummaryBuffer
+- `src/models.py` — `ChatSession`, `ConversationMessage`
+- `src/repositories.py` — `ChatSessionRepository`, `ConversationMessageRepository`
+- `prompts/conversation_summarize.yaml`, `prompts/memory_check.yaml`
+- `alembic/versions/004_create_conversation_messages.py`
 
-**Flow NL2SQL:**
-1. `get_context` - încarcă schema tabelului
-2. `generate_sql` - LLM generează SQL
-3. `validate_sql` - validează cu sqlparse
-4. `execute_sql` - execută în DB → DataFrame
-5. `handle_error` - dacă eroare, LLM corectează SQL și retry
+---
 
-**Prompturi:** `analyst_plan.yaml`, `analyst_synthesize.yaml`, `nl2sql_generate.yaml`, `nl2sql_error.yaml`
+## Task 2: Prompt Caching
+
+**Problema:** System prompt-ul se trimite la fiecare request, consumand tokeni si timp.
+
+**Solutia:** Anthropic `cache_control: {"type": "ephemeral"}` — system prompt-ul se cache-uieste pe server-ul Anthropic dupa primul call.
+
+### Ce s-a construit
+
+- **Modificat `_prepare_messages()`** in `skillab-py/src/skillab/llm/providers/anthropic.py`:
+  - System message wrapped cu `cache_control`
+  - `self.last_usage` expune token usage (cache_creation/read)
+- **Benchmark script** (`scripts/benchmark_caching.py`):
+  - Trimite acelasi query de 2 ori cu system prompt mare
+  - Call 1: creeaza cache
+  - Call 2: citeste din cache (mai rapid, mai ieftin)
+
+### Rezultate benchmark
+- Call 1: cache creation (tokeni normali)
+- Call 2: cache read (tokeni redusi, latenta mai mica)
+- Nota: Anthropic necesita minim ~1024 tokeni in system prompt pentru activare
+
+### Cum se ruleaza
+```bash
+cd scripts && python benchmark_caching.py
+```
+
+---
+
+## Task 3: Intent Classifier cu scikit-learn
+
+**Problema:** Orchestratorul nu stia ce tip de intrebare primeste — totul mergea la RAG Agent.
+
+**Solutia:** Un clasificator ML (TF-IDF + LogisticRegression) care detecteaza intentul fara LLM si ruteaza catre agentul potrivit.
+
+### Cele 3 intente
+
+| Intent | Descriere | Ruteaza catre |
+|--------|-----------|---------------|
+| `search` | Cauta/gaseste documente | RAG Agent |
+| `extract` | Date numerice, totaluri, statistici | Analyst Agent → NL2SQL |
+| `summarize` | Rezumat/sinteza informatii | RAG Agent |
+
+### Ce s-a construit
+
+**1. Date de antrenament** (`data/intent_training_data.csv`)
+- 90 exemple etichetate (30 per intent), in romana
+- Domeniu: achizitii publice, licitatii, furnizori
+
+**2. Script antrenament** (`scripts/train_intent_classifier.py`)
+- Pipeline: TF-IDF Vectorizer → LogisticRegression
+- TF-IDF converteste text in vectori numerici (cuvintele rare per intent au pondere mare)
+- Cross-validation accuracy: **92%**
+- Model salvat: `data/intent_classifier.joblib` (36KB)
+
+**3. Clasa IntentClassifier** (`src/intent_classifier.py`)
+- Incarca modelul `.joblib` la startup
+- `predict(query)` → returneaza label, confidence, all_scores
+- Fara apel LLM, fara cost, ~3ms per query
+
+**4. Integrare in Orchestrator** (`src/orchestrator.py`)
+- Nod nou `classify_intent` in graf
+- Nod nou `call_analyst` pentru intent `extract`
+- Routing: `extract` → Analyst Agent, `search`/`summarize` → RAG Agent
+
+**5. Script comparatie** (`scripts/compare_intent_methods.py`)
+- Aceleasi query-uri clasificate de sklearn vs LLM
+- Masoara: accuracy, latenta, tokeni, cost
+
+### Flow complet (cu toate cele 3 task-uri)
+
+```
+load_memory → check_memory ──┬──→ answer_from_memory → save_memory → END
+                             │
+                             └──→ classify_intent ──┬──→ call_rag → evaluate → answer → save_memory → END
+                                  (sklearn, ~3ms)   │     (search & summarize)
+                                                    │
+                                                    └──→ call_analyst → save_memory → END
+                                                          (extract → NL2SQL)
+```
+
+### Rezultate comparatie sklearn vs LLM
+
+| Metric | sklearn | LLM |
+|--------|---------|-----|
+| Accuracy | 100% (10/10) | 100% (10/10) |
+| Avg latency | **3.3 ms** | 1,360 ms |
+| Cost | **$0 (free)** | ~$0.004 / 10 queries |
+| Speedup | **415x** | baseline |
+
+### Cum se ruleaza
+
+```bash
+# Antreneaza clasificatorul (optional — modelul e deja salvat)
+python scripts/train_intent_classifier.py
+
+# Ruleaza comparatia sklearn vs LLM
+python scripts/compare_intent_methods.py
+```
+
+---
 
 ## Setup
 
 ```bash
+# Instalare dependinte
 pip install -r requirements.txt
+pip install scikit-learn joblib
 pip install -e skillab-py
 
+# Porneste PostgreSQL + pgvector
 docker-compose up -d
+
+# Aplica migratii (inclusiv tabelele de conversation memory)
 alembic upgrade head
 
-# Restaurează date (694k achiziții, 8k anunțuri, 135 chunks)
+# Restaureaza date
 docker exec -i exercise_orchestrator-postgres-1 pg_restore -U demo -d rag_demo --data-only < data/rag_demo.dump
 
-# Adaugă metadata (doc_type + company_name) pe document_chunks
-cd scripts && python add_doc_type_metadata.py && cd ..
-
-cp .env.example .env  # editează API key
-```
-
-## Structură
-
-```
-├── alembic/           # Migrații DB
-├── data/              # CSV-uri, documente
-├── prompts/           # YAML prompts
-├── scripts/           # Seed scripts
-├── skillab-py/        # LLM, prompts, tools
-│   └── src/skillab/tools/
-│       ├── implementations.py  # TODO: join_data, filter_data
-│       └── params.py           # Pydantic params
-└── src/
-    ├── database.py        # Connection + transaction
-    ├── models.py          # SQLAlchemy models
-    ├── repositories.py    # Repository pattern
-    ├── rag_service.py     # pgvector search service
-    ├── state.py           # Pydantic states
-    ├── rag_agent.py       # TODO: node_refine
-    ├── orchestrator.py    # TODO: node_evaluate, node_answer
-    ├── nl2sql_agent.py    # TODO: node_generate_sql, node_validate_sql, node_execute_sql
-    ├── analyst_agent.py   # TODO: node_make_plan, node_synthesize
-    └── main.py
-```
-
-## De implementat
-
-### 1. RAG Agent (`src/rag_agent.py`)
-```python
-def node_refine(self, state: RAGAgentState) -> dict:
-    """
-    Dacă state.feedback există:
-    1. Renderează prompt "rag_refine"
-    2. Apelează LLM
-    3. Parsează JSON în RefinedQuery.model_validate_json()
-    4. Return {"refined": refined_query}
-
-    Dacă nu există feedback:
-    - Return {"refined": RefinedQuery(query=state.query)}
-    """
-```
-
-### 2. Orchestrator (`src/orchestrator.py`)
-```python
-def node_evaluate(self, state: OrchestratorState) -> dict:
-    """
-    1. Construiește context din state.rag_result.results
-    2. Renderează prompt "rag_evaluate"
-    3. Apelează LLM
-    4. Parsează în OrchestratorFeedback.model_validate_json()
-    5. Return {"feedback": feedback}
-    """
-
-def node_answer(self, state: OrchestratorState) -> dict:
-    """
-    1. Construiește context din state.rag_result.results
-    2. Renderează prompt "rag_answer"
-    3. Apelează LLM
-    4. Return {"answer": answer, "status": "success"|"partial"|"failed"}
-    """
-```
-
-### 3. NL2SQL Agent (`src/nl2sql_agent.py`)
-```python
-def node_generate_sql(self, state) -> dict:
-    # Generează SQL din întrebare
-
-def node_validate_sql(self, state) -> dict:
-    # Validează SQL (sqlparse)
-
-def node_execute_sql(self, state) -> dict:
-    # Execută SQL, returnează DataFrame
-```
-
-### 4. Analyst Agent (`src/analyst_agent.py`)
-```python
-def node_make_plan(self, state) -> dict:
-    # Creează plan cu QueryStep și ToolStep
-
-def node_synthesize(self, state) -> dict:
-    # Sintetizează răspuns din state.slices
-```
-
-### 5. Tools (`skillab-py/src/skillab/tools/implementations.py`)
-```python
-@register_tool
-def join_data(params: JoinDataParams) -> pd.DataFrame:
-    # pd.merge(params.input_dfs[0], params.input_dfs[1], ...)
-
-@register_tool
-def filter_data(params: FilterDataParams) -> pd.DataFrame:
-    # params.input_dfs[0][mask]
-```
-
-## Plan format
-
-LLM generează plan JSON:
-```json
-[
-  {"id": "q1", "action": "query", "table": "achizitii", "sub_question": "..."},
-  {"id": "q2", "action": "query", "table": "anunturi", "sub_question": "..."},
-  {"id": "joined", "action": "tool", "tool_name": "join_data", "input_steps": ["q1", "q2"], "params": {"left_key": "cui", "right_key": "cui"}},
-  {"id": "result", "action": "tool", "tool_name": "filter_data", "input_steps": ["joined"], "params": {"column": "valoare", "operator": ">", "value": "50000"}}
-]
-```
-
-Rezultate în `state.slices["q1"]`, `state.slices["joined"]`, etc.
-
-## Hints
-
-```python
-# Render prompt
-prompt = self.prompts.render("rag_evaluate", query=q, context=ctx, ...)
-
-# LLM call
-response = self.llm.generate_sync([{"role": "user", "content": prompt}])
-
-# Parse JSON direct în Pydantic (recomandat)
-import re
-match = re.search(r'```json\s*(.*?)\s*```', response, re.DOTALL)
-json_str = match.group(1) if match else response
-feedback = OrchestratorFeedback.model_validate_json(json_str)
-
-# SQL execution
-with transaction() as session:
-    result = session.execute(text(sql_query))
-    df = pd.DataFrame(result.mappings().all())
-
-# Tool catalog pentru prompt
-tools_catalog = ToolWrapper.to_prompt_string()
+# Configureaza API key
+cp .env.example .env  # editează cu cheia ta
 ```
 
 ## Run
@@ -262,57 +164,28 @@ tools_catalog = ToolWrapper.to_prompt_string()
 cd src && python main.py
 ```
 
-## Enhancements (beyond TODOs)
-
-### 1. Metadata-based Hybrid Search
-
-RAG Agent-ul folosește un **hybrid search** care combină vector similarity cu filtrare pe metadata.
-
-**Cum funcționează:**
-
-1. LLM-ul extrage metadata din query (method `_extract_metadata` in `rag_agent.py`):
-   - `doc_type`: factura / contract / client / raport
-   - `company_name`: numele companiei menționate în query (ex: TechSoft, DataPro)
-
-2. Vector search-ul rulează cu WHERE clauses pe `metadata_json` (`search_similar_filtered` in `repositories.py`):
-   ```sql
-   WHERE embedding IS NOT NULL
-     AND LOWER(metadata_json::jsonb->>'company_name') = LOWER(:company_name)
-     AND LOWER(metadata_json::jsonb->>'doc_type') = LOWER(:doc_type)
-   ORDER BY embedding <=> query_vector
-   ```
-
-3. Comparația e **case-insensitive** (LOWER pe ambele părți) — "TechSoft", "techsoft", "TECHSOFT" toate funcționează.
-
-**Metadata pe document_chunks:**
-
-Scriptul `scripts/add_doc_type_metadata.py` adaugă în `metadata_json`:
-- `doc_type` — derivat din prefixul file_name (factura_, client_, contract_, raport_)
-- `company_name` — derivat din pattern-ul file_name (techsoft, datapro, cloudnet, secureit, webdev)
+## Structura proiect
 
 ```
-file_name                          | doc_type | company_name
------------------------------------|----------|-------------
-factura_0004_techsoft_202406.docx  | factura  | techsoft
-client_datapro_sa.docx             | client   | datapro
-raport_Q1_2024.docx                | raport   | (none)
+src/
+  main.py                — entry point (chat interactiv cu sesiuni)
+  orchestrator.py        — Orchestrator LangGraph (memory + intent + RAG/Analyst)
+  intent_classifier.py   — [NOU] IntentClassifier (sklearn)
+  memory_manager.py      — [NOU] SummaryBuffer: save, load, summarize
+  rag_agent.py           — RAG Agent (refine → search)
+  analyst_agent.py       — Analyst Agent (plan → execute → synthesize)
+  nl2sql_agent.py        — NL2SQL Agent (generate → validate → execute SQL)
+  state.py               — Pydantic state models (+ intent, intent_confidence)
+  models.py              — SQLAlchemy models (+ ChatSession, ConversationMessage)
+  repositories.py        — Repository pattern (+ ChatSession/Message repos)
+scripts/
+  train_intent_classifier.py  — [NOU] Antreneaza TF-IDF + LogReg
+  compare_intent_methods.py   — [NOU] Comparatie sklearn vs LLM
+  benchmark_caching.py        — [NOU] Benchmark prompt caching
+data/
+  intent_training_data.csv    — [NOU] 90 exemple etichetate
+  intent_classifier.joblib    — [NOU] Model antrenat (36KB)
+prompts/
+  conversation_summarize.yaml — [NOU] Prompt sumarizare conversatie
+  memory_check.yaml           — [NOU] Prompt verificare memorie
 ```
-
-**Fișiere modificate:**
-- `src/rag_agent.py` — `_extract_metadata()` + `node_search_hybrid()` (original `node_search` nemodificat)
-- `src/repositories.py` — `search_similar_filtered()` (original `search_similar` nemodificat)
-- `src/rag_service.py` — `search_filtered()`
-
-### 2. Debug Logging
-
-Fiecare run scrie un log detaliat în `logs/run_TIMESTAMP.md` cu:
-- **Orchestrator+RAG**: chunks retrieve (cu scores), feedback evaluare, răspuns final
-- **Analyst+NL2SQL**: plan generat, SQL generat per step, rezultate execuție (preview primele 10 rânduri), răspuns sintetizat
-
-Fișier: `src/debug_log.py`
-
-### 3. Bugs Fixed
-
-1. **DetachedInstanceError** (`rag_agent.py`): chunk attributes accessed after session close — moved SearchResultItem creation inside `with transaction()` block
-2. **dict vs object** (`orchestrator.py`, `analyst_agent.py`): LangGraph `invoke()` returns dict, not Pydantic model — changed `.attr` to `["key"]`
-3. **Missing packages**: `pip install anthropic sqlparse`
